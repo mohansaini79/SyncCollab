@@ -35,7 +35,8 @@ jwt = JWTManager(app)
 limiter = Limiter(
     app=app,
     key_func=get_remote_address,
-    default_limits=["200 per hour"]
+    default_limits=["200 per hour"],
+    storage_uri="memory://"
 )
 
 CORS(app, resources={
@@ -52,7 +53,9 @@ socketio = SocketIO(
     cors_allowed_origins="*",
     async_mode="threading",
     ping_timeout=60,
-    ping_interval=25
+    ping_interval=25,
+    logger=False,
+    engineio_logger=False
 )
 
 @app.before_request
@@ -83,8 +86,8 @@ mongo_uri = os.getenv("MONGO_URI")
 if not mongo_uri:
     raise ValueError("❌ MONGO_URI not found in .env")
 
-client = MongoClient(mongo_uri)
-db = client["gitconnect"]
+client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
+db = client["syncspace"]
 
 users = db.users
 teams = db.teams
@@ -149,14 +152,14 @@ def log_activity(user_id, user_name, action, workspace_id=None, details=None):
         "action": action,
         "details": details,
         "workspace_id": workspace_id,
-        "timestamp": timestamp  # Store as datetime in MongoDB
+        "timestamp": timestamp
     }
     activities.insert_one(activity)
 
-    # Emit with ISO string (JSON serializable)
     if workspace_id:
         emit_activity = activity.copy()
         emit_activity["timestamp"] = timestamp.isoformat()
+        emit_activity["_id"] = str(activity.get("_id", ""))
         socketio.emit("activity_added", emit_activity, room=workspace_id)
 
 def send_notification(user_id, message, workspace_id=None):
@@ -170,10 +173,10 @@ def send_notification(user_id, message, workspace_id=None):
         "read": False,
         "created_at": timestamp
     }
-    notifications.insert_one(notif)
+    result = notifications.insert_one(notif)
 
-    # Emit with ISO string
     emit_notif = notif.copy()
+    emit_notif["_id"] = str(result.inserted_id)
     emit_notif["created_at"] = timestamp.isoformat()
     socketio.emit("notification", emit_notif, room=user_id)
 
@@ -250,7 +253,7 @@ def forgot_password():
     user = users.find_one({"email": data.get("email")})
 
     if not user:
-        return jsonify({"msg": "Email not found"}), 404
+        return jsonify({"msg": "If email exists, reset link has been sent"}), 200
 
     reset_token = secrets.token_urlsafe(32)
     reset_tokens.insert_one({
@@ -335,7 +338,7 @@ def upload_avatar():
     file = request.files['avatar']
     upload_result = cloudinary.uploader.upload(
         file,
-        folder="gitconnect/avatars",
+        folder="syncspace/avatars",
         transformation=[{"width": 200, "height": 200, "crop": "fill"}]
     )
 
@@ -368,7 +371,6 @@ def handle_teams():
 
         return jsonify({"id": str(result.inserted_id), "name": team["name"]})
 
-    # GET
     user_teams = []
     for team in teams.find({"members": identity["id"]}).sort("created_at", -1):
         user_teams.append({
@@ -397,7 +399,6 @@ def manage_team(team_id):
         log_activity(identity["id"], identity["name"], f"Deleted team '{team['name']}'")
         return jsonify({"msg": "Team deleted"})
 
-    # PUT
     data = request.get_json()
     teams.update_one(
         {"_id": ObjectId(team_id)},
@@ -437,7 +438,6 @@ def handle_team_members(team_id):
         log_activity(identity["id"], identity["name"], f"Added member to team '{team['name']}'")
         return jsonify({"msg": "Member added"})
 
-    # GET
     member_ids = [ObjectId(m) for m in team.get("members", [])]
     members = list(users.find({"_id": {"$in": member_ids}}, {"password": 0}))
 
@@ -498,7 +498,6 @@ def handle_workspaces():
 
         return jsonify({"id": str(result.inserted_id), "name": workspace["name"]})
 
-    # GET
     user_workspaces = []
     for ws in workspaces.find({"members": identity["id"], "archived": False}).sort("created_at", -1):
         user_workspaces.append({
@@ -526,7 +525,6 @@ def manage_workspace(ws_id):
         log_activity(identity["id"], identity["name"], f"Deleted workspace '{ws['name']}'")
         return jsonify({"msg": "Workspace deleted"})
 
-    # PUT
     data = request.get_json()
     update_data = {}
     if "name" in data:
@@ -575,7 +573,6 @@ def handle_kanban(identity, ws_id):
         log_activity(identity["id"], identity["name"], "Updated Kanban board", ws_id)
         return jsonify({"success": True})
 
-    # GET
     board = kanban_boards.find_one({"workspace_id": ObjectId(ws_id)})
     if not board:
         default_columns = [
@@ -612,7 +609,6 @@ def manage_task(identity, ws_id, col_idx, task_idx):
         socketio.emit("kanban_updated", {"workspace_id": ws_id}, room=ws_id)
         return jsonify({"success": True})
 
-    # PUT
     data = request.get_json()
     task = columns[col_idx]["tasks"][task_idx]
 
@@ -672,7 +668,6 @@ def manage_column(identity, ws_id, col_idx):
         socketio.emit("kanban_updated", {"workspace_id": ws_id}, room=ws_id)
         return jsonify({"success": True})
 
-    # PUT
     data = request.get_json()
     columns[col_idx]["name"] = data.get("name", columns[col_idx]["name"])
 
@@ -725,15 +720,14 @@ def handle_task_comments(identity, ws_id, col_idx, task_idx):
         }
         task_comments.insert_one(comment)
 
-        # Emit with ISO string
         emit_comment = comment.copy()
         emit_comment["created_at"] = comment["created_at"].isoformat()
+        emit_comment["_id"] = str(comment.get("_id", ""))
         socketio.emit("comment_added", emit_comment, room=ws_id)
 
         log_activity(identity["id"], identity["name"], "Added task comment", ws_id)
         return jsonify({"success": True})
 
-    # GET
     comments = list(task_comments.find({"task_key": task_key}).sort("created_at", 1))
     return jsonify([{
         "id": str(c["_id"]),
@@ -775,9 +769,22 @@ def handle_documents(identity, ws_id):
 
         return jsonify({"success": True})
 
-    # GET
     doc = documents.find_one({"workspace_id": ObjectId(ws_id)})
     return jsonify({"content": doc.get("content", "{}") if doc else "{}"})
+
+@app.route("/api/docs/<ws_id>/versions", methods=["GET"])
+@workspace_member_required
+def get_doc_versions(identity, ws_id):
+    versions = list(document_versions.find(
+        {"workspace_id": ObjectId(ws_id)}
+    ).sort("saved_at", -1).limit(20))
+
+    return jsonify([{
+        "id": str(v["_id"]),
+        "saved_by": v.get("saved_by", "Unknown"),
+        "saved_at": v["saved_at"].isoformat(),
+        "content": v.get("content", "{}")
+    } for v in versions])
 
 # ========================================
 # FILES
@@ -792,13 +799,14 @@ def handle_files(identity, ws_id):
         file = request.files['file']
 
         MAX_SIZE = 10 * 1024 * 1024
-        if len(file.read()) > MAX_SIZE:
+        file_content = file.read()
+        if len(file_content) > MAX_SIZE:
             return jsonify({"error": "File too large (max 10MB)"}), 400
         file.seek(0)
 
         upload_result = cloudinary.uploader.upload(
             file,
-            folder=f"gitconnect/{ws_id}",
+            folder=f"syncspace/{ws_id}",
             resource_type="auto"
         )
 
@@ -822,7 +830,6 @@ def handle_files(identity, ws_id):
             "url": upload_result["secure_url"]
         })
 
-    # GET
     workspace_files = list(files.find({"workspace_id": ObjectId(ws_id)}).sort("uploaded_at", -1))
     return jsonify([{
         "id": str(f["_id"]),
@@ -833,6 +840,23 @@ def handle_files(identity, ws_id):
         "type": f.get("type", "file"),
         "uploaded_at": f["uploaded_at"].isoformat()
     } for f in workspace_files])
+
+@app.route("/api/files/<file_id>", methods=["DELETE"])
+@jwt_required()
+def delete_file(file_id):
+    identity = get_jwt_identity()
+    file_doc = files.find_one({"_id": ObjectId(file_id)})
+
+    if not file_doc:
+        return jsonify({"error": "File not found"}), 404
+
+    if file_doc["uploaded_by_id"] != identity["id"]:
+        return jsonify({"error": "Only uploader can delete"}), 403
+
+    files.delete_one({"_id": ObjectId(file_id)})
+    log_activity(identity["id"], identity["name"], f"Deleted file '{file_doc['filename']}'", str(file_doc["workspace_id"]))
+
+    return jsonify({"msg": "File deleted"})
 
 # ========================================
 # CHAT
@@ -1012,10 +1036,10 @@ def handle_chat_message(data):
         "message": data.get("message"),
         "timestamp": timestamp
     }
-    messages.insert_one(message)
+    result = messages.insert_one(message)
 
     emit("chat_message", {
-        "id": str(message["_id"]),
+        "id": str(result.inserted_id),
         "user": data.get("user"),
         "message": data.get("message"),
         "timestamp": timestamp.isoformat()
@@ -1026,6 +1050,13 @@ def handle_typing(data):
     emit("user_typing", {
         "user": data.get("user"),
         "is_typing": data.get("is_typing")
+    }, room=data.get("workspace_id"), skip_sid=request.sid)
+
+@socketio.on("doc_cursor")
+def handle_doc_cursor(data):
+    emit("cursor_update", {
+        "user": data.get("user"),
+        "position": data.get("position")
     }, room=data.get("workspace_id"), skip_sid=request.sid)
 
 # ========================================
@@ -1048,6 +1079,7 @@ def not_found(e):
 
 @app.errorhandler(500)
 def server_error(e):
+    print(f"❌ Server error: {e}")
     return jsonify({"error": "Internal server error"}), 500
 
 # ========================================
@@ -1055,7 +1087,7 @@ def server_error(e):
 # ========================================
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 10000))
-    print(f"🚀 GitConnect Server running on http://localhost:{port}")
-    print(f"📊 Features: All datetime issues FIXED for Python 3.13")
-    print(f"✅ MongoDB Atlas connected | Login system working")
-    socketio.run(app, host="0.0.0.0", port=port, debug=False)
+    print(f"🚀 SyncSpace Server running on http://localhost:{port}")
+    print(f"📊 Python 3.13 Compatible | All datetime issues FIXED")
+    print(f"✅ MongoDB Atlas connected | JWT auth enabled")
+    socketio.run(app, host="0.0.0.0", port=port, debug=False, allow_unsafe_werkzeug=True)
