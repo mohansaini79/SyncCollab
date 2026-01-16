@@ -1877,7 +1877,7 @@
 
     <!-- ==================== JAVASCRIPT ==================== -->
     <script>
-      const API = window.location.origin;
+      const API = "https://synccollab.onrender.com";
       let token = localStorage.getItem("Token");
       let user = JSON.parse(localStorage.getItem("currentUser") || "null");
       let socket, quill, currentWS, draggedTask, currentTaskKey, currentTaskPos;
