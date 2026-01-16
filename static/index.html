@@ -1,0 +1,3616 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SyncSpace - Collaborative Project Management</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+    <link
+      href="https://cdn.quilljs.com/1.3.6/quill.snow.css"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+
+    <style>
+      :root {
+        --primary: #6366f1;
+        --primary-dark: #4f46e5;
+        --secondary: #8b5cf6;
+        --success: #10b981;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+        --bg-light: #f9fafb;
+        --bg-dark: #1f2937;
+        --text-light: #111827;
+        --text-dark: #f9fafb;
+      }
+
+      /* Dark Mode */
+      body.dark-mode {
+        background: var(--bg-dark);
+        color: var(--text-dark);
+      }
+
+      body.dark-mode .bg-white {
+        background: #374151 !important;
+      }
+      body.dark-mode .text-gray-800 {
+        color: #f9fafb !important;
+      }
+      body.dark-mode .text-gray-600 {
+        color: #d1d5db !important;
+      }
+      body.dark-mode .border-gray-300 {
+        border-color: #4b5563 !important;
+      }
+      body.dark-mode .bg-gray-50 {
+        background: #1f2937 !important;
+      }
+      body.dark-mode .bg-gray-100 {
+        background: #374151 !important;
+      }
+
+      /* Smooth Scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: linear-gradient(180deg, var(--primary), var(--secondary));
+        border-radius: 10px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #e5e7eb;
+      }
+      body.dark-mode ::-webkit-scrollbar-track {
+        background: #374151;
+      }
+
+      /* Sidebar - Responsive */
+      .sidebar {
+        transition: transform 0.3s ease-in-out;
+      }
+
+      @media (max-width: 768px) {
+        .sidebar {
+          position: fixed;
+          left: 0;
+          top: 64px;
+          height: calc(100vh - 64px);
+          transform: translateX(-100%);
+          z-index: 40;
+          width: 80%;
+          max-width: 280px;
+        }
+
+        .sidebar.active {
+          transform: translateX(0);
+        }
+
+        .sidebar-overlay {
+          display: none;
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.5);
+          z-index: 35;
+        }
+
+        .sidebar-overlay.active {
+          display: block;
+        }
+      }
+
+      /* Sidebar Active State */
+      .sidebar-active {
+        background: linear-gradient(
+          90deg,
+          rgba(99, 102, 241, 0.1),
+          rgba(139, 92, 246, 0.05)
+        );
+        border-left: 4px solid var(--primary);
+        color: var(--primary);
+        font-weight: 600;
+      }
+
+      /* Task Cards */
+      .task-card {
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        cursor: grab;
+        border: 2px solid transparent;
+      }
+
+      .task-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 10px 25px rgba(99, 102, 241, 0.15);
+        border-color: var(--primary);
+      }
+
+      .task-card.dragging {
+        opacity: 0.5;
+        transform: rotate(5deg);
+      }
+
+      .task-card:active {
+        cursor: grabbing;
+      }
+
+      /* Kanban Columns - Responsive */
+      .kanban-column {
+        min-width: 280px;
+        max-width: 350px;
+        max-height: 600px;
+        overflow-y: auto;
+      }
+
+      @media (max-width: 640px) {
+        .kanban-column {
+          min-width: 260px;
+          max-width: 100%;
+        }
+      }
+
+      /* Editor */
+      #editor-container {
+        height: 500px;
+        border-radius: 8px;
+      }
+
+      @media (max-width: 768px) {
+        #editor-container {
+          height: 350px;
+        }
+      }
+
+      /* Priority Badges with gradients */
+      .priority-high {
+        background: linear-gradient(135deg, #fecaca, #fca5a5);
+        color: #991b1b;
+        font-weight: 600;
+        padding: 4px 12px;
+        border-radius: 12px;
+      }
+      .priority-medium {
+        background: linear-gradient(135deg, #fef3c7, #fde68a);
+        color: #92400e;
+        font-weight: 600;
+        padding: 4px 12px;
+        border-radius: 12px;
+      }
+      .priority-low {
+        background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+        color: #1e40af;
+        font-weight: 600;
+        padding: 4px 12px;
+        border-radius: 12px;
+      }
+
+      /* Enhanced Animations */
+      @keyframes slideIn {
+        from {
+          opacity: 0;
+          transform: translateY(-20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      @keyframes scaleIn {
+        from {
+          opacity: 0;
+          transform: scale(0.9);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+
+      .animate-slide {
+        animation: slideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .animate-fade {
+        animation: fadeIn 0.3s ease;
+      }
+      .animate-scale {
+        animation: scaleIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      /* Online Status Pulse */
+      .online-dot {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        width: 12px;
+        height: 12px;
+        background: var(--success);
+        border: 2px solid white;
+        border-radius: 50%;
+        animation: pulse 2s infinite;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+
+      /* Typing Indicator */
+      .typing-indicator span {
+        animation: typing 1.4s infinite;
+        opacity: 0.3;
+      }
+      .typing-indicator span:nth-child(2) {
+        animation-delay: 0.2s;
+      }
+      .typing-indicator span:nth-child(3) {
+        animation-delay: 0.4s;
+      }
+
+      @keyframes typing {
+        0%,
+        60%,
+        100% {
+          opacity: 0.3;
+        }
+        30% {
+          opacity: 1;
+        }
+      }
+
+      /* Loading Spinner with gradient */
+      .spinner {
+        border: 4px solid rgba(99, 102, 241, 0.2);
+        border-top-color: var(--primary);
+        border-right-color: var(--secondary);
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        animation: spin 0.8s linear infinite;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* Card Hover Effects */
+      .card-hover {
+        transition: all 0.3s ease;
+      }
+
+      .card-hover:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+      }
+
+      /* Button Ripple Effect */
+      button,
+      .btn {
+        position: relative;
+        overflow: hidden;
+      }
+
+      button::after,
+      .btn::after {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 0;
+        height: 0;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.5);
+        transform: translate(-50%, -50%);
+        transition: width 0.6s, height 0.6s;
+      }
+
+      button:active::after,
+      .btn:active::after {
+        width: 300px;
+        height: 300px;
+      }
+
+      /* Responsive Modal */
+      @media (max-width: 640px) {
+        .modal-content {
+          width: 95% !important;
+          max-width: 95% !important;
+          max-height: 90vh;
+          overflow-y: auto;
+          margin: 0 auto;
+        }
+      }
+
+      /* File Preview Modal */
+      .file-preview-modal {
+        backdrop-filter: blur(8px);
+      }
+
+      /* Stats Cards Gradient */
+      .stat-card {
+        position: relative;
+        overflow: hidden;
+      }
+
+      .stat-card::before {
+        content: "";
+        position: absolute;
+        top: -50%;
+        right: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(
+          circle,
+          rgba(255, 255, 255, 0.1) 0%,
+          transparent 70%
+        );
+        animation: rotate 20s linear infinite;
+      }
+
+      @keyframes rotate {
+        from {
+          transform: rotate(0deg);
+        }
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* Mobile Navigation */
+      .mobile-menu-btn {
+        display: none;
+      }
+
+      @media (max-width: 768px) {
+        .mobile-menu-btn {
+          display: block;
+        }
+
+        .desktop-only {
+          display: none !important;
+        }
+      }
+
+      /* Toast Notification Enhancement */
+      .toast {
+        position: fixed;
+        top: 80px;
+        right: 20px;
+        z-index: 100;
+        animation: slideInRight 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      @keyframes slideInRight {
+        from {
+          opacity: 0;
+          transform: translateX(100%);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+
+      /* Responsive Grid */
+      @media (max-width: 1024px) {
+        .lg\:grid-cols-4 {
+          grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        }
+
+        .lg\:grid-cols-3 {
+          grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .md\:grid-cols-2,
+        .lg\:grid-cols-3,
+        .lg\:grid-cols-4 {
+          grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+        }
+      }
+
+      /* Better Focus States */
+      input:focus,
+      select:focus,
+      textarea:focus,
+      button:focus {
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.3);
+      }
+
+      /* Smooth Page Transitions */
+      .section {
+        animation: fadeIn 0.5s ease;
+      }
+    </style>
+  </head>
+  <body class="bg-gray-50 transition-colors duration-200">
+    <!-- ==================== LOADING SCREEN ==================== -->
+    <div
+      id="loading-screen"
+      class="hidden fixed inset-0 bg-white dark:bg-gray-900 flex items-center justify-center z-50"
+    >
+      <div class="text-center">
+        <div class="spinner mx-auto mb-4"></div>
+        <p class="text-gray-600 dark:text-gray-300">Loading...</p>
+      </div>
+    </div>
+
+    <!-- ==================== AUTH SECTION ==================== -->
+    <div
+      id="auth-section"
+      class="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 p-4"
+    >
+      <div
+        class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-8 animate-scale"
+      >
+        <div class="text-center mb-8">
+          <h1
+            class="text-4xl md:text-5xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-2"
+          >
+            SyncSpace
+          </h1>
+          <p class="text-gray-600 text-sm md:text-base">
+            Collaborative Project Management
+          </p>
+        </div>
+
+        <!-- Login Form -->
+        <div id="login-form">
+          <h2 class="text-2xl font-semibold mb-6 text-gray-800">
+            Welcome Back
+          </h2>
+          <form onsubmit="handleLogin(event)">
+            <div class="mb-4">
+              <label class="block text-sm font-medium mb-2 text-gray-700"
+                >Email</label
+              >
+              <input
+                id="login-email"
+                type="email"
+                required
+                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="you@example.com"
+              />
+            </div>
+            <div class="mb-4">
+              <label class="block text-sm font-medium mb-2 text-gray-700"
+                >Password</label
+              >
+              <input
+                id="login-password"
+                type="password"
+                required
+                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="••••••••"
+              />
+            </div>
+            <div class="mb-6 text-right">
+              <button
+                type="button"
+                onclick="showForgotPassword()"
+                class="text-sm text-indigo-600 hover:underline"
+              >
+                Forgot password?
+              </button>
+            </div>
+            <button
+              type="submit"
+              class="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-lg hover:from-indigo-700 hover:to-purple-700 transition font-semibold"
+            >
+              Login
+            </button>
+          </form>
+          <p class="text-center mt-4 text-gray-600 text-sm">
+            Don't have an account?
+            <button
+              onclick="toggleAuth('register')"
+              class="text-indigo-600 font-semibold hover:underline"
+            >
+              Register
+            </button>
+          </p>
+        </div>
+
+        <!-- Register Form -->
+        <div id="register-form" class="hidden">
+          <h2 class="text-2xl font-semibold mb-6 text-gray-800">
+            Create Account
+          </h2>
+          <form onsubmit="handleRegister(event)">
+            <div class="mb-4">
+              <label class="block text-sm font-medium mb-2 text-gray-700"
+                >Full Name</label
+              >
+              <input
+                id="register-name"
+                type="text"
+                required
+                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="John Doe"
+              />
+            </div>
+            <div class="mb-4">
+              <label class="block text-sm font-medium mb-2 text-gray-700"
+                >Email</label
+              >
+              <input
+                id="register-email"
+                type="email"
+                required
+                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="you@example.com"
+              />
+            </div>
+            <div class="mb-4">
+              <label class="block text-sm font-medium mb-2 text-gray-700"
+                >Password</label
+              >
+              <input
+                id="register-password"
+                type="password"
+                required
+                minlength="6"
+                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="Min. 6 characters"
+              />
+            </div>
+            <div class="mb-6">
+              <label class="block text-sm font-medium mb-2 text-gray-700"
+                >Role</label
+              >
+              <select
+                id="register-role"
+                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="member">Member</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <button
+              type="submit"
+              class="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-lg hover:from-indigo-700 hover:to-purple-700 transition font-semibold"
+            >
+              Register
+            </button>
+          </form>
+          <p class="text-center mt-4 text-gray-600 text-sm">
+            Already have an account?
+            <button
+              onclick="toggleAuth('login')"
+              class="text-indigo-600 font-semibold hover:underline"
+            >
+              Login
+            </button>
+          </p>
+        </div>
+
+        <!-- Forgot Password Form -->
+        <div id="forgot-password-form" class="hidden">
+          <h2 class="text-2xl font-semibold mb-6 text-gray-800">
+            Reset Password
+          </h2>
+          <form onsubmit="handleForgotPassword(event)">
+            <div class="mb-4">
+              <label class="block text-sm font-medium mb-2 text-gray-700"
+                >Email</label
+              >
+              <input
+                id="forgot-email"
+                type="email"
+                required
+                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="you@example.com"
+              />
+            </div>
+            <button
+              type="submit"
+              class="w-full bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition font-semibold"
+            >
+              Send Reset Link
+            </button>
+          </form>
+          <p class="text-center mt-4 text-gray-600 text-sm">
+            <button
+              onclick="toggleAuth('login')"
+              class="text-indigo-600 font-semibold hover:underline"
+            >
+              Back to Login
+            </button>
+          </p>
+        </div>
+
+        <!-- Error Display -->
+        <div
+          id="auth-error"
+          class="mt-4 p-3 bg-red-100 text-red-700 rounded-lg hidden text-sm"
+        ></div>
+        <div
+          id="auth-success"
+          class="mt-4 p-3 bg-green-100 text-green-700 rounded-lg hidden text-sm"
+        ></div>
+      </div>
+    </div>
+
+    <!-- ==================== MAIN APP ==================== -->
+    <div id="app-section" class="hidden">
+      <!-- Top Navbar -->
+      <nav
+        class="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-50 transition-colors"
+      >
+        <div class="max-w-full mx-auto px-4 md:px-6">
+          <div class="flex justify-between h-16">
+            <div class="flex items-center space-x-2 md:space-x-4">
+              <!-- Mobile Menu Button -->
+              <button
+                onclick="toggleMobileSidebar()"
+                class="mobile-menu-btn p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+              >
+                <svg
+                  class="w-6 h-6 text-gray-600 dark:text-gray-300"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M4 6h16M4 12h16M4 18h16"
+                  ></path>
+                </svg>
+              </button>
+
+              <h1
+                class="text-xl md:text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent"
+              >
+                SyncSpace
+              </h1>
+
+              <!-- Global Search -->
+              <div class="relative hidden md:block">
+                <input
+                  id="global-search"
+                  type="text"
+                  placeholder="Search..."
+                  class="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white w-48 lg:w-64"
+                  oninput="globalSearch(this.value)"
+                />
+                <i
+                  class="fas fa-search absolute left-3 top-3 text-gray-400"
+                ></i>
+                <div
+                  id="search-results"
+                  class="hidden absolute top-full mt-2 w-full bg-white dark:bg-gray-700 rounded-lg shadow-xl border dark:border-gray-600 max-h-96 overflow-y-auto"
+                ></div>
+              </div>
+            </div>
+
+            <div class="flex items-center space-x-2 md:space-x-4">
+              <!-- Theme Toggle -->
+              <button
+                onclick="toggleTheme()"
+                class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+              >
+                <i
+                  id="theme-icon"
+                  class="fas fa-moon text-gray-600 dark:text-gray-300 text-lg"
+                ></i>
+              </button>
+
+              <!-- Notifications -->
+              <div class="relative">
+                <button
+                  onclick="toggleNotifications()"
+                  class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 relative transition"
+                >
+                  <i
+                    class="fas fa-bell text-gray-600 dark:text-gray-300 text-lg"
+                  ></i>
+                  <span
+                    id="notif-badge"
+                    class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-semibold"
+                    >0</span
+                  >
+                </button>
+                <div
+                  id="notif-dropdown"
+                  class="hidden absolute right-0 mt-2 w-80 md:w-96 bg-white dark:bg-gray-700 rounded-lg shadow-xl border dark:border-gray-600 max-h-96 overflow-y-auto"
+                >
+                  <div
+                    class="p-4 border-b dark:border-gray-600 flex justify-between items-center"
+                  >
+                    <h3 class="font-semibold text-gray-800 dark:text-white">
+                      Notifications
+                    </h3>
+                    <button
+                      onclick="markAllNotificationsRead()"
+                      class="text-xs text-indigo-600 hover:underline"
+                    >
+                      Mark all read
+                    </button>
+                  </div>
+                  <div id="notif-list"></div>
+                </div>
+              </div>
+
+              <!-- User Menu -->
+              <div class="relative">
+                <button
+                  onclick="toggleUserMenu()"
+                  class="flex items-center space-x-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg p-2 transition"
+                >
+                  <div class="relative">
+                    <img
+                      id="user-avatar-img"
+                      src=""
+                      alt=""
+                      class="hidden h-8 w-8 md:h-10 md:w-10 rounded-full object-cover"
+                    />
+                    <div
+                      id="user-avatar-text"
+                      class="bg-indigo-600 text-white rounded-full h-8 w-8 md:h-10 md:w-10 flex items-center justify-center font-semibold text-sm md:text-base"
+                    ></div>
+                  </div>
+                  <span
+                    id="user-name"
+                    class="font-medium text-gray-700 dark:text-gray-200 hidden md:block text-sm"
+                  ></span>
+                  <i
+                    class="fas fa-chevron-down text-gray-400 text-sm hidden md:block"
+                  ></i>
+                </button>
+
+                <!-- User Dropdown -->
+                <div
+                  id="user-menu"
+                  class="hidden absolute right-0 mt-2 w-48 bg-white dark:bg-gray-700 rounded-lg shadow-xl border dark:border-gray-600"
+                >
+                  <button
+                    onclick="openModal('profile-modal')"
+                    class="w-full text-left px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-600 flex items-center space-x-2 text-sm"
+                  >
+                    <i class="fas fa-user text-gray-600 dark:text-gray-300"></i>
+                    <span class="dark:text-white">Profile Settings</span>
+                  </button>
+                  <button
+                    onclick="logout()"
+                    class="w-full text-left px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-600 text-red-600 dark:text-red-400 flex items-center space-x-2 text-sm"
+                  >
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span>Logout</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      <div class="flex">
+        <!-- Sidebar Overlay -->
+        <div class="sidebar-overlay" onclick="toggleMobileSidebar()"></div>
+
+        <!-- Sidebar -->
+        <aside
+          class="sidebar w-64 bg-white dark:bg-gray-800 min-h-screen shadow-lg sticky top-16 transition-colors"
+        >
+          <div class="p-4 space-y-1">
+            <button
+              onclick="showSection('dashboard')"
+              class="nav-link sidebar-active w-full text-left px-4 py-3 rounded-lg flex items-center transition hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              <i class="fas fa-home mr-3 text-lg"></i>
+              <span class="dark:text-white">Dashboard</span>
+            </button>
+            <button
+              onclick="showSection('teams')"
+              class="nav-link w-full text-left px-4 py-3 rounded-lg flex items-center transition hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-300"
+            >
+              <i class="fas fa-users mr-3 text-lg"></i>
+              <span>Teams</span>
+            </button>
+            <button
+              onclick="showSection('workspaces')"
+              class="nav-link w-full text-left px-4 py-3 rounded-lg flex items-center transition hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-300"
+            >
+              <i class="fas fa-briefcase mr-3 text-lg"></i>
+              <span>Workspaces</span>
+            </button>
+            <button
+              onclick="showSection('kanban')"
+              class="nav-link w-full text-left px-4 py-3 rounded-lg flex items-center transition hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-300"
+            >
+              <i class="fas fa-columns mr-3 text-lg"></i>
+              <span>Kanban Board</span>
+            </button>
+            <button
+              onclick="showSection('documents')"
+              class="nav-link w-full text-left px-4 py-3 rounded-lg flex items-center transition hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-300"
+            >
+              <i class="fas fa-file-alt mr-3 text-lg"></i>
+              <span>Documents</span>
+            </button>
+            <button
+              onclick="showSection('files')"
+              class="nav-link w-full text-left px-4 py-3 rounded-lg flex items-center transition hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-300"
+            >
+              <i class="fas fa-folder mr-3 text-lg"></i>
+              <span>Files</span>
+            </button>
+            <button
+              onclick="showSection('chat')"
+              class="nav-link w-full text-left px-4 py-3 rounded-lg flex items-center transition hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-300"
+            >
+              <i class="fas fa-comments mr-3 text-lg"></i>
+              <span>Team Chat</span>
+            </button>
+            <button
+              onclick="showSection('activities')"
+              class="nav-link w-full text-left px-4 py-3 rounded-lg flex items-center transition hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-300"
+            >
+              <i class="fas fa-history mr-3 text-lg"></i>
+              <span>Activities</span>
+            </button>
+          </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main
+          class="flex-1 p-4 md:p-8 bg-gray-50 dark:bg-gray-900 transition-colors"
+        >
+          <!-- Dashboard Section -->
+          <div id="dashboard-section" class="section">
+            <h2
+              class="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white mb-6"
+            >
+              Dashboard
+            </h2>
+
+            <!-- Stats Cards -->
+            <div
+              class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8"
+            >
+              <div
+                class="stat-card bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-6 text-white transform hover:scale-105 transition card-hover"
+              >
+                <div class="flex items-center justify-between relative z-10">
+                  <div>
+                    <p class="text-blue-100 text-sm">Total Users</p>
+                    <h3
+                      id="stat-users"
+                      class="text-3xl md:text-4xl font-bold mt-2"
+                    >
+                      0
+                    </h3>
+                  </div>
+                  <i class="fas fa-users text-4xl md:text-5xl opacity-30"></i>
+                </div>
+              </div>
+              <div
+                class="stat-card bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-6 text-white transform hover:scale-105 transition card-hover"
+              >
+                <div class="flex items-center justify-between relative z-10">
+                  <div>
+                    <p class="text-green-100 text-sm">My Teams</p>
+                    <h3
+                      id="stat-teams"
+                      class="text-3xl md:text-4xl font-bold mt-2"
+                    >
+                      0
+                    </h3>
+                  </div>
+                  <i
+                    class="fas fa-user-friends text-4xl md:text-5xl opacity-30"
+                  ></i>
+                </div>
+              </div>
+              <div
+                class="stat-card bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg p-6 text-white transform hover:scale-105 transition card-hover"
+              >
+                <div class="flex items-center justify-between relative z-10">
+                  <div>
+                    <p class="text-purple-100 text-sm">Workspaces</p>
+                    <h3
+                      id="stat-workspaces"
+                      class="text-3xl md:text-4xl font-bold mt-2"
+                    >
+                      0
+                    </h3>
+                  </div>
+                  <i
+                    class="fas fa-briefcase text-4xl md:text-5xl opacity-30"
+                  ></i>
+                </div>
+              </div>
+              <div
+                class="stat-card bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-lg p-6 text-white transform hover:scale-105 transition card-hover"
+              >
+                <div class="flex items-center justify-between relative z-10">
+                  <div>
+                    <p class="text-orange-100 text-sm">Total Files</p>
+                    <h3
+                      id="stat-files"
+                      class="text-3xl md:text-4xl font-bold mt-2"
+                    >
+                      0
+                    </h3>
+                  </div>
+                  <i class="fas fa-folder text-4xl md:text-5xl opacity-30"></i>
+                </div>
+              </div>
+            </div>
+
+            <!-- Task Stats -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-8">
+              <div
+                class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 card-hover"
+              >
+                <h3
+                  class="text-lg md:text-xl font-semibold text-gray-800 dark:text-white mb-4"
+                >
+                  Task Overview
+                </h3>
+                <div class="space-y-3">
+                  <div class="flex justify-between items-center">
+                    <span
+                      class="text-sm md:text-base text-gray-600 dark:text-gray-300"
+                      >Pending Tasks</span
+                    >
+                    <span
+                      id="pending-tasks"
+                      class="text-xl md:text-2xl font-bold text-orange-600"
+                      >0</span
+                    >
+                  </div>
+                  <div class="flex justify-between items-center">
+                    <span
+                      class="text-sm md:text-base text-gray-600 dark:text-gray-300"
+                      >Completed Tasks</span
+                    >
+                    <span
+                      id="completed-tasks"
+                      class="text-xl md:text-2xl font-bold text-green-600"
+                      >0</span
+                    >
+                  </div>
+                  <div class="flex justify-between items-center">
+                    <span
+                      class="text-sm md:text-base text-gray-600 dark:text-gray-300"
+                      >Total Tasks</span
+                    >
+                    <span
+                      id="total-tasks"
+                      class="text-xl md:text-2xl font-bold text-indigo-600"
+                      >0</span
+                    >
+                  </div>
+                </div>
+              </div>
+
+              <div
+                class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 card-hover"
+              >
+                <h3
+                  class="text-lg md:text-xl font-semibold text-gray-800 dark:text-white mb-4"
+                >
+                  Recent Activity
+                </h3>
+                <div
+                  id="dashboard-activities"
+                  class="space-y-2 max-h-48 overflow-y-auto"
+                >
+                  <p class="text-gray-500 dark:text-gray-400 text-sm">
+                    No recent activity
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Teams Section -->
+          <div id="teams-section" class="section hidden">
+            <div
+              class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4"
+            >
+              <h2
+                class="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white"
+              >
+                Teams
+              </h2>
+              <button
+                onclick="openModal('create-team-modal')"
+                class="w-full md:w-auto px-4 py-2 md:px-6 md:py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition shadow-lg text-sm md:text-base"
+              >
+                <i class="fas fa-plus mr-2"></i>Create Team
+              </button>
+            </div>
+            <div
+              id="teams-list"
+              class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6"
+            ></div>
+          </div>
+
+          <!-- Workspaces Section -->
+          <div id="workspaces-section" class="section hidden">
+            <div
+              class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4"
+            >
+              <h2
+                class="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white"
+              >
+                Workspaces
+              </h2>
+              <button
+                onclick="openModal('create-workspace-modal')"
+                class="w-full md:w-auto px-4 py-2 md:px-6 md:py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 transition shadow-lg text-sm md:text-base"
+              >
+                <i class="fas fa-plus mr-2"></i>Create Workspace
+              </button>
+            </div>
+            <div
+              id="workspaces-list"
+              class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6"
+            ></div>
+          </div>
+
+          <!-- Kanban Section -->
+          <div id="kanban-section" class="section hidden">
+            <div
+              class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4"
+            >
+              <h2
+                class="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white"
+              >
+                Kanban Board
+              </h2>
+              <div
+                class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 w-full md:w-auto"
+              >
+                <select
+                  id="kanban-workspace"
+                  onchange="loadKanban()"
+                  class="w-full sm:w-auto px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white text-sm"
+                >
+                  <option value="">Select Workspace</option>
+                </select>
+                <button
+                  onclick="addColumn()"
+                  class="w-full sm:w-auto px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm"
+                >
+                  <i class="fas fa-plus mr-1"></i>Add Column
+                </button>
+              </div>
+            </div>
+            <div
+              id="kanban-board"
+              class="flex space-x-4 overflow-x-auto pb-4"
+            ></div>
+          </div>
+
+          <!-- Documents Section -->
+          <div id="documents-section" class="section hidden">
+            <div
+              class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4"
+            >
+              <h2
+                class="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white"
+              >
+                Document Editor
+              </h2>
+              <div
+                class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 w-full md:w-auto"
+              >
+                <select
+                  id="doc-workspace"
+                  onchange="loadDocument()"
+                  class="w-full sm:w-auto px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white text-sm"
+                >
+                  <option value="">Select Workspace</option>
+                </select>
+                <button
+                  onclick="openModal('doc-versions-modal')"
+                  class="w-full sm:w-auto px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition text-sm"
+                >
+                  <i class="fas fa-history mr-1"></i>Versions
+                </button>
+              </div>
+            </div>
+            <div
+              class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 md:p-6"
+            >
+              <div
+                id="active-editors"
+                class="mb-4 flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300"
+              >
+                <i class="fas fa-circle text-green-500 animate-pulse"></i>
+                <span>Active editors: <span id="editor-count">0</span></span>
+              </div>
+              <div id="editor-container" class="dark:bg-gray-700"></div>
+              <div
+                class="mt-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3"
+              >
+                <span
+                  class="text-sm text-gray-500 dark:text-gray-400"
+                  id="doc-status"
+                  >Auto-save enabled</span
+                >
+                <button
+                  onclick="saveDocument()"
+                  class="w-full sm:w-auto px-4 py-2 md:px-6 md:py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm md:text-base"
+                >
+                  <i class="fas fa-save mr-2"></i>Save Document
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Files Section -->
+          <div id="files-section" class="section hidden">
+            <div
+              class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4"
+            >
+              <h2
+                class="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white"
+              >
+                Files
+              </h2>
+              <div
+                class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 w-full md:w-auto"
+              >
+                <select
+                  id="files-workspace"
+                  onchange="loadFiles()"
+                  class="w-full sm:w-auto px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white text-sm"
+                >
+                  <option value="">Select Workspace</option>
+                </select>
+                <button
+                  onclick="openModal('upload-modal')"
+                  class="w-full sm:w-auto px-4 py-2 md:px-6 md:py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm md:text-base"
+                >
+                  <i class="fas fa-upload mr-2"></i>Upload File
+                </button>
+              </div>
+            </div>
+            <div
+              id="files-list"
+              class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6"
+            ></div>
+          </div>
+
+          <!-- Chat Section -->
+          <div id="chat-section" class="section hidden">
+            <div
+              class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4"
+            >
+              <h2
+                class="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white"
+              >
+                Team Chat
+              </h2>
+              <div
+                class="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-4 w-full md:w-auto"
+              >
+                <div
+                  id="online-users-display"
+                  class="text-sm text-gray-600 dark:text-gray-300"
+                >
+                  <i class="fas fa-circle text-green-500"></i>
+                  <span id="online-count">0</span> online
+                </div>
+                <select
+                  id="chat-workspace"
+                  onchange="joinChat()"
+                  class="w-full sm:w-auto px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white text-sm"
+                >
+                  <option value="">Select Workspace</option>
+                </select>
+              </div>
+            </div>
+            <div
+              class="bg-white dark:bg-gray-800 rounded-lg shadow-lg h-[500px] md:h-[600px] flex flex-col"
+            >
+              <div
+                id="chat-messages"
+                class="flex-1 p-4 md:p-6 overflow-y-auto bg-gray-50 dark:bg-gray-900"
+              ></div>
+              <div
+                id="typing-indicator"
+                class="hidden px-4 md:px-6 py-2 text-sm text-gray-500 dark:text-gray-400"
+              >
+                <span class="typing-indicator">
+                  <span>•</span><span>•</span><span>•</span>
+                </span>
+                <span id="typing-user"></span> is typing...
+              </div>
+              <div
+                class="border-t dark:border-gray-700 p-3 md:p-4 bg-white dark:bg-gray-800"
+              >
+                <form onsubmit="sendMessage(event)" class="flex space-x-2">
+                  <input
+                    id="chat-input"
+                    type="text"
+                    placeholder="Type your message..."
+                    class="flex-1 px-3 py-2 md:px-4 md:py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white text-sm"
+                    oninput="handleTyping()"
+                  />
+                  <button
+                    type="submit"
+                    class="px-4 py-2 md:px-6 md:py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                  >
+                    <i class="fas fa-paper-plane"></i>
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+
+          <!-- Activities Section -->
+          <div id="activities-section" class="section hidden">
+            <div
+              class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4"
+            >
+              <h2
+                class="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white"
+              >
+                Activity Timeline
+              </h2>
+              <select
+                id="activities-workspace"
+                onchange="loadActivities()"
+                class="w-full md:w-auto px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white text-sm"
+              >
+                <option value="">Select Workspace</option>
+              </select>
+            </div>
+            <div
+              class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 md:p-6"
+            >
+              <div id="activities-list" class="space-y-4"></div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <!-- ==================== MODALS ==================== -->
+
+    <!-- Create Team Modal -->
+    <div
+      id="create-team-modal"
+      class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+    >
+      <div
+        class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md mx-4 p-6 md:p-8 animate-scale modal-content"
+      >
+        <h3
+          class="text-xl md:text-2xl font-bold mb-6 text-gray-800 dark:text-white"
+        >
+          Create Team
+        </h3>
+        <form onsubmit="createTeam(event)">
+          <div class="mb-4">
+            <label
+              class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300"
+              >Team Name</label
+            >
+            <input
+              id="team-name"
+              type="text"
+              required
+              class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white text-sm"
+              placeholder="Enter team name"
+            />
+          </div>
+          <div class="mb-6">
+            <label
+              class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300"
+              >Description (Optional)</label
+            >
+            <textarea
+              id="team-description"
+              rows="3"
+              class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white text-sm"
+              placeholder="Team description"
+            ></textarea>
+          </div>
+          <div
+            class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3"
+          >
+            <button
+              type="submit"
+              class="flex-1 bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition font-semibold text-sm"
+            >
+              Create
+            </button>
+            <button
+              type="button"
+              onclick="closeModal('create-team-modal')"
+              class="flex-1 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200 py-3 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition font-semibold text-sm"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Team Settings Modal -->
+    <div
+      id="team-settings-modal"
+      class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+    >
+      <div
+        class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl mx-4 p-6 md:p-8 animate-scale max-h-[90vh] overflow-y-auto modal-content"
+      >
+        <h3
+          class="text-xl md:text-2xl font-bold mb-6 text-gray-800 dark:text-white"
+        >
+          Team Settings
+        </h3>
+
+        <!-- Team Info -->
+        <div class="mb-6">
+          <h4
+            class="font-semibold text-base md:text-lg mb-3 text-gray-800 dark:text-white"
+          >
+            Team Information
+          </h4>
+          <div class="space-y-3">
+            <div>
+              <label
+                class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300"
+                >Team Name</label
+              >
+              <input
+                id="edit-team-name"
+                type="text"
+                class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+              />
+            </div>
+            <div>
+              <label
+                class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300"
+                >Description</label
+              >
+              <textarea
+                id="edit-team-description"
+                rows="3"
+                class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+              ></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Team Members -->
+        <div class="mb-6">
+          <div class="flex justify-between items-center mb-3">
+            <h4
+              class="font-semibold text-base md:text-lg text-gray-800 dark:text-white"
+            >
+              Members
+            </h4>
+            <button
+              onclick="openAddMemberModal()"
+              class="text-sm text-indigo-600 hover:underline"
+            >
+              <i class="fas fa-plus mr-1"></i>Add Member
+            </button>
+          </div>
+          <div id="team-members-list" class="space-y-2"></div>
+        </div>
+
+        <div
+          class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3"
+        >
+          <button
+            onclick="updateTeam()"
+            class="flex-1 bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition text-sm"
+          >
+            Save Changes
+          </button>
+          <button
+            onclick="deleteTeam()"
+            class="sm:w-auto px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm"
+          >
+            Delete Team
+          </button>
+          <button
+            onclick="closeModal('team-settings-modal')"
+            class="flex-1 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200 py-3 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition text-sm"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create Workspace Modal -->
+    <div
+      id="create-workspace-modal"
+      class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+    >
+      <div
+        class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md mx-4 p-6 md:p-8 animate-scale modal-content"
+      >
+        <h3
+          class="text-xl md:text-2xl font-bold mb-6 text-gray-800 dark:text-white"
+        >
+          Create Workspace
+        </h3>
+        <form onsubmit="createWorkspace(event)">
+          <div class="mb-4">
+            <label
+              class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300"
+              >Workspace Name</label
+            >
+            <input
+              id="workspace-name"
+              type="text"
+              required
+              class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white text-sm"
+              placeholder="Enter workspace name"
+            />
+          </div>
+          <div class="mb-4">
+            <label
+              class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300"
+              >Select Team</label
+            >
+            <select
+              id="workspace-team"
+              required
+              class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white text-sm"
+            >
+              <option value="">Choose a team</option>
+            </select>
+          </div>
+          <div class="mb-6">
+            <label
+              class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300"
+              >Description (Optional)</label
+            >
+            <textarea
+              id="workspace-description"
+              rows="3"
+              class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+              placeholder="Workspace description"
+            ></textarea>
+          </div>
+          <div
+            class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3"
+          >
+            <button
+              type="submit"
+              class="flex-1 bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition font-semibold text-sm"
+            >
+              Create
+            </button>
+            <button
+              type="button"
+              onclick="closeModal('create-workspace-modal')"
+              class="flex-1 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200 py-3 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition font-semibold text-sm"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Edit Task Modal -->
+    <div
+      id="edit-task-modal"
+      class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+    >
+      <div
+        class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl mx-4 p-6 md:p-8 animate-scale modal-content"
+      >
+        <h3
+          class="text-xl md:text-2xl font-bold mb-6 text-gray-800 dark:text-white"
+        >
+          Edit Task
+        </h3>
+        <form onsubmit="updateTask(event)">
+          <div class="mb-4">
+            <label
+              class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300"
+              >Task Title</label
+            >
+            <input
+              id="edit-task-title"
+              type="text"
+              required
+              class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+            />
+          </div>
+          <div class="mb-4">
+            <label
+              class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300"
+              >Description</label
+            >
+            <textarea
+              id="edit-task-desc"
+              rows="3"
+              class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+            ></textarea>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label
+                class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300"
+                >Priority</label
+              >
+              <select
+                id="edit-task-priority"
+                class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+              >
+                <option value="">None</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </div>
+            <div>
+              <label
+                class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300"
+                >Due Date</label
+              >
+              <input
+                id="edit-task-due"
+                type="date"
+                class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+              />
+            </div>
+          </div>
+          <div class="mb-6">
+            <label
+              class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300"
+              >Assign To</label
+            >
+            <select
+              id="edit-task-assigned"
+              class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+            >
+              <option value="">Unassigned</option>
+            </select>
+          </div>
+          <div
+            class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3"
+          >
+            <button
+              type="submit"
+              class="flex-1 bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition text-sm"
+            >
+              Save Changes
+            </button>
+            <button
+              type="button"
+              onclick="deleteCurrentTask()"
+              class="sm:w-auto px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm"
+            >
+              Delete
+            </button>
+            <button
+              type="button"
+              onclick="closeModal('edit-task-modal')"
+              class="flex-1 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200 py-3 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition text-sm"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Task Comments Modal -->
+    <div
+      id="comments-modal"
+      class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+    >
+      <div
+        class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl mx-4 p-6 md:p-8 max-h-[80vh] overflow-y-auto animate-scale modal-content"
+      >
+        <h3
+          class="text-xl md:text-2xl font-bold mb-4 text-gray-800 dark:text-white"
+        >
+          Task Comments
+        </h3>
+        <div
+          id="comments-list"
+          class="mb-4 max-h-60 md:max-h-96 overflow-y-auto space-y-3"
+        ></div>
+        <div
+          class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 mb-4"
+        >
+          <input
+            id="comment-input"
+            type="text"
+            placeholder="Add a comment..."
+            class="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:text-white text-sm"
+          />
+          <button
+            onclick="addComment()"
+            class="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm"
+          >
+            Add
+          </button>
+        </div>
+        <button
+          onclick="closeModal('comments-modal')"
+          class="w-full bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200 py-3 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition font-semibold text-sm"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+
+    <!-- Upload File Modal -->
+    <div
+      id="upload-modal"
+      class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+    >
+      <div
+        class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md mx-4 p-6 md:p-8 animate-scale modal-content"
+      >
+        <h3
+          class="text-xl md:text-2xl font-bold mb-6 text-gray-800 dark:text-white"
+        >
+          Upload File
+        </h3>
+        <form onsubmit="uploadFile(event)">
+          <div class="mb-4">
+            <label
+              class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300"
+              >Select File (Max 10MB)</label
+            >
+            <input
+              id="file-input"
+              type="file"
+              required
+              class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+            />
+          </div>
+          <div
+            class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3"
+          >
+            <button
+              type="submit"
+              class="flex-1 bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition font-semibold text-sm"
+            >
+              Upload
+            </button>
+            <button
+              type="button"
+              onclick="closeModal('upload-modal')"
+              class="flex-1 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200 py-3 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition font-semibold text-sm"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- File Preview Modal -->
+    <div
+      id="file-preview-modal"
+      class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 file-preview-modal p-4"
+    >
+      <div
+        class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden"
+      >
+        <div
+          class="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 border-b dark:border-gray-700 gap-3"
+        >
+          <h3
+            id="preview-filename"
+            class="text-lg md:text-xl font-bold text-gray-800 dark:text-white break-all"
+          ></h3>
+          <div class="flex space-x-2 w-full sm:w-auto">
+            <a
+              id="preview-download"
+              href=""
+              download
+              class="flex-1 sm:flex-none text-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm"
+            >
+              <i class="fas fa-download mr-2"></i>Download
+            </a>
+            <button
+              onclick="closeModal('file-preview-modal')"
+              class="flex-1 sm:flex-none px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition text-sm"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+        <div id="preview-content" class="p-4 overflow-auto max-h-[75vh]"></div>
+      </div>
+    </div>
+
+    <!-- Document Versions Modal -->
+    <div
+      id="doc-versions-modal"
+      class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+    >
+      <div
+        class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl mx-4 p-6 md:p-8 animate-scale modal-content"
+      >
+        <h3
+          class="text-xl md:text-2xl font-bold mb-6 text-gray-800 dark:text-white"
+        >
+          Document Version History
+        </h3>
+        <div
+          id="versions-list"
+          class="space-y-2 max-h-60 md:max-h-96 overflow-y-auto mb-4"
+        ></div>
+        <button
+          onclick="closeModal('doc-versions-modal')"
+          class="w-full bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200 py-3 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition text-sm"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+
+    <!-- Profile Settings Modal -->
+    <div
+      id="profile-modal"
+      class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+    >
+      <div
+        class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md mx-4 p-6 md:p-8 animate-scale modal-content"
+      >
+        <h3
+          class="text-xl md:text-2xl font-bold mb-6 text-gray-800 dark:text-white"
+        >
+          Profile Settings
+        </h3>
+        <form onsubmit="updateProfile(event)">
+          <div class="mb-4 text-center">
+            <div class="relative inline-block">
+              <img
+                id="profile-avatar-preview"
+                src=""
+                alt=""
+                class="hidden h-20 w-20 md:h-24 md:w-24 rounded-full object-cover"
+              />
+              <div
+                id="profile-avatar-text"
+                class="bg-indigo-600 text-white rounded-full h-20 w-20 md:h-24 md:w-24 flex items-center justify-center text-2xl md:text-3xl font-semibold"
+              ></div>
+              <label
+                for="avatar-upload"
+                class="absolute bottom-0 right-0 bg-indigo-600 text-white rounded-full p-2 cursor-pointer hover:bg-indigo-700"
+              >
+                <i class="fas fa-camera"></i>
+              </label>
+              <input
+                id="avatar-upload"
+                type="file"
+                accept="image/*"
+                class="hidden"
+                onchange="uploadAvatar(event)"
+              />
+            </div>
+          </div>
+          <div class="mb-4">
+            <label
+              class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300"
+              >Name</label
+            >
+            <input
+              id="profile-name"
+              type="text"
+              class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+            />
+          </div>
+          <div class="mb-4">
+            <label
+              class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300"
+              >Email</label
+            >
+            <input
+              id="profile-email"
+              type="email"
+              disabled
+              class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-600 dark:text-gray-300 text-sm"
+            />
+          </div>
+          <div class="mb-6">
+            <label
+              class="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300"
+              >New Password (leave blank to keep current)</label
+            >
+            <input
+              id="profile-password"
+              type="password"
+              class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+              placeholder="New password"
+            />
+          </div>
+          <div
+            class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3"
+          >
+            <button
+              type="submit"
+              class="flex-1 bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition font-semibold text-sm"
+            >
+              Save Changes
+            </button>
+            <button
+              type="button"
+              onclick="closeModal('profile-modal')"
+              class="flex-1 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200 py-3 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition font-semibold text-sm"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ==================== JAVASCRIPT ==================== -->
+    <script>
+      const API = window.location.origin;
+      let token = localStorage.getItem("Token");
+      let user = JSON.parse(localStorage.getItem("currentUser") || "null");
+      let socket, quill, currentWS, draggedTask, currentTaskKey, currentTaskPos;
+      let typingTimeout;
+      let autoSaveInterval;
+
+      // ==================== INITIALIZATION ====================
+      document.addEventListener("DOMContentLoaded", () => {
+        console.log("🚀 GitConnect initialized on:", API);
+
+        // Apply saved theme
+        const savedTheme = localStorage.getItem("theme") || "light";
+        if (savedTheme === "dark") {
+          document.body.classList.add("dark-mode");
+          document
+            .getElementById("theme-icon")
+            .classList.replace("fa-moon", "fa-sun");
+        }
+
+        if (token && user) {
+          // Check token validity
+          fetch(`${API}/api/dashboard`, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+            .then((res) => {
+              if (res.status === 401) {
+                logout();
+              } else {
+                showApp();
+                initApp();
+              }
+            })
+            .catch(() => {
+              showApp();
+              initApp();
+            });
+        }
+      });
+
+      // ==================== AUTH FUNCTIONS ====================
+      function toggleAuth(form) {
+        document.getElementById("login-form").classList.add("hidden");
+        document.getElementById("register-form").classList.add("hidden");
+        document.getElementById("forgot-password-form").classList.add("hidden");
+        document.getElementById("auth-error").classList.add("hidden");
+        document.getElementById("auth-success").classList.add("hidden");
+
+        document.getElementById(`${form}-form`).classList.remove("hidden");
+      }
+
+      function showForgotPassword() {
+        toggleAuth("forgot-password");
+      }
+
+      async function handleLogin(e) {
+        e.preventDefault();
+        showLoading();
+
+        try {
+          const res = await fetch(`${API}/api/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: document.getElementById("login-email").value.trim(),
+              password: document.getElementById("login-password").value,
+            }),
+          });
+
+          const data = await res.json();
+
+          if (!res.ok) {
+            hideLoading();
+            showAuthError(data.msg || "Login failed");
+            return;
+          }
+
+          token = data.access_token;
+          user = data.user;
+          localStorage.setItem("authToken", token);
+          localStorage.setItem("currentUser", JSON.stringify(user));
+
+          hideLoading();
+          showApp();
+          initApp();
+        } catch (err) {
+          hideLoading();
+          showAuthError("Connection error. Please check if server is running.");
+        }
+      }
+
+      async function handleRegister(e) {
+        e.preventDefault();
+        showLoading();
+
+        try {
+          const res = await fetch(`${API}/api/register`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: document.getElementById("register-name").value.trim(),
+              email: document.getElementById("register-email").value.trim(),
+              password: document.getElementById("register-password").value,
+              role: document.getElementById("register-role").value,
+            }),
+          });
+
+          const data = await res.json();
+
+          if (!res.ok) {
+            hideLoading();
+            showAuthError(data.msg || "Registration failed");
+            return;
+          }
+
+          token = data.access_token;
+          user = data.user;
+          localStorage.setItem("authToken", token);
+          localStorage.setItem("currentUser", JSON.stringify(user));
+
+          hideLoading();
+          showApp();
+          initApp();
+        } catch (err) {
+          hideLoading();
+          showAuthError("Connection error. Please check if server is running.");
+        }
+      }
+
+      async function handleForgotPassword(e) {
+        e.preventDefault();
+        showLoading();
+
+        try {
+          const res = await fetch(`${API}/api/forgot-password`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: document.getElementById("forgot-email").value.trim(),
+            }),
+          });
+
+          const data = await res.json();
+          hideLoading();
+
+          if (res.ok) {
+            showAuthSuccess("Password reset link sent to your email!");
+            setTimeout(() => toggleAuth("login"), 3000);
+          } else {
+            showAuthError(data.msg || "Failed to send reset link");
+          }
+        } catch (err) {
+          hideLoading();
+          showAuthError("Connection error");
+        }
+      }
+
+      function showAuthError(msg) {
+        const el = document.getElementById("auth-error");
+        el.textContent = msg;
+        el.classList.remove("hidden");
+        setTimeout(() => el.classList.add("hidden"), 5000);
+      }
+
+      function showAuthSuccess(msg) {
+        const el = document.getElementById("auth-success");
+        el.textContent = msg;
+        el.classList.remove("hidden");
+        setTimeout(() => el.classList.add("hidden"), 5000);
+      }
+
+      function showApp() {
+        document.getElementById("auth-section").classList.add("hidden");
+        document.getElementById("app-section").classList.remove("hidden");
+
+        // Set user info
+        if (user.avatar) {
+          document.getElementById("user-avatar-img").src = user.avatar;
+          document.getElementById("user-avatar-img").classList.remove("hidden");
+          document.getElementById("user-avatar-text").classList.add("hidden");
+        } else {
+          document.getElementById("user-avatar-text").textContent = user.name
+            .charAt(0)
+            .toUpperCase();
+        }
+        document.getElementById("user-name").textContent = user.name;
+      }
+
+      function logout() {
+        if (socket) socket.disconnect();
+        if (autoSaveInterval) clearInterval(autoSaveInterval);
+        localStorage.clear();
+        location.reload();
+      }
+
+      function showLoading() {
+        document.getElementById("loading-screen").classList.remove("hidden");
+      }
+
+      function hideLoading() {
+        document.getElementById("loading-screen").classList.add("hidden");
+      }
+
+      // ==================== APP INITIALIZATION ====================
+      async function initApp() {
+        console.log("⚙️ Initializing app...");
+
+        // Socket.IO
+        socket = io(API, {
+          query: { token },
+          transports: ["websocket", "polling"],
+        });
+
+        socket.on("connect", () => console.log("✅ Socket connected"));
+        socket.on("disconnect", () => console.log("❌ Socket disconnected"));
+        socket.on("kanban_updated", () => loadKanban());
+        socket.on("chat_message", displayMessage);
+        socket.on("user_typing", handleUserTyping);
+        socket.on("notification", handleNotification);
+        socket.on("user_joined", handleUserJoined);
+        socket.on("user_left", handleUserLeft);
+
+        // Quill Editor
+        setTimeout(() => {
+          const container = document.getElementById("editor-container");
+          if (container && !quill) {
+            quill = new Quill("#editor-container", {
+              theme: "snow",
+              modules: {
+                toolbar: [
+                  [{ header: [1, 2, 3, false] }],
+                  ["bold", "italic", "underline", "strike"],
+                  [{ list: "ordered" }, { list: "bullet" }],
+                  ["link", "blockquote", "code-block"],
+                  ["clean"],
+                ],
+              },
+            });
+
+            // Auto-save every 30 seconds
+            autoSaveInterval = setInterval(() => {
+              const wsId = document.getElementById("doc-workspace").value;
+              if (wsId && quill) {
+                saveDocument(true);
+              }
+            }, 30000);
+
+            console.log("✅ Quill editor initialized with auto-save");
+          }
+        }, 200);
+
+        // Load initial data
+        await loadDashboardData();
+        await loadTeams();
+        await loadWorkspaces();
+        await loadNotifications();
+      }
+
+      // ==================== DASHBOARD ====================
+      async function loadDashboardData() {
+        try {
+          const res = await fetch(`${API}/api/dashboard`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const data = await res.json();
+
+          document.getElementById("stat-users").textContent = data.users;
+          document.getElementById("stat-teams").textContent = data.teams;
+          document.getElementById("stat-workspaces").textContent =
+            data.workspaces;
+          document.getElementById("stat-files").textContent = data.files;
+
+          // Recent activities
+          if (data.recent_activities && data.recent_activities.length > 0) {
+            document.getElementById("dashboard-activities").innerHTML =
+              data.recent_activities
+                .map(
+                  (a) => `
+                <div class="text-sm text-gray-600 dark:text-gray-300">
+                    <i class="fas fa-circle text-indigo-500 text-xs mr-2"></i>${
+                      a.action
+                    }
+                    <span class="text-xs text-gray-400 ml-2">${new Date(
+                      a.timestamp
+                    ).toLocaleString()}</span>
+                </div>
+            `
+                )
+                .join("");
+          }
+        } catch (err) {
+          console.error("Load dashboard error:", err);
+        }
+      }
+
+      // ==================== THEME TOGGLE ====================
+      function toggleTheme() {
+        const isDark = document.body.classList.toggle("dark-mode");
+        const icon = document.getElementById("theme-icon");
+
+        if (isDark) {
+          icon.classList.replace("fa-moon", "fa-sun");
+          localStorage.setItem("theme", "dark");
+          if (user) {
+            fetch(`${API}/api/profile`, {
+              method: "PUT",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({ theme: "dark" }),
+            });
+          }
+        } else {
+          icon.classList.replace("fa-sun", "fa-moon");
+          localStorage.setItem("theme", "light");
+          if (user) {
+            fetch(`${API}/api/profile`, {
+              method: "PUT",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({ theme: "light" }),
+            });
+          }
+        }
+      }
+
+      // ==================== USER MENU ====================
+      function toggleUserMenu() {
+        document.getElementById("user-menu").classList.toggle("hidden");
+      }
+
+      // ==================== MOBILE SIDEBAR ====================
+      function toggleMobileSidebar() {
+        const sidebar = document.querySelector(".sidebar");
+        const overlay = document.querySelector(".sidebar-overlay");
+
+        sidebar.classList.toggle("active");
+        overlay.classList.toggle("active");
+      }
+
+      // Close sidebar when clicking nav links on mobile
+      document.addEventListener("click", (e) => {
+        if (
+          e.target.classList.contains("nav-link") &&
+          window.innerWidth <= 768
+        ) {
+          const sidebar = document.querySelector(".sidebar");
+          const overlay = document.querySelector(".sidebar-overlay");
+          sidebar.classList.remove("active");
+          overlay.classList.remove("active");
+        }
+      });
+
+      // ==================== PROFILE ====================
+      async function updateProfile(e) {
+        e.preventDefault();
+
+        const updateData = {
+          name: document.getElementById("profile-name").value,
+          password:
+            document.getElementById("profile-password").value || undefined,
+        };
+
+        try {
+          const res = await fetch(`${API}/api/profile`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(updateData),
+          });
+
+          if (res.ok) {
+            user.name = updateData.name;
+            localStorage.setItem("currentUser", JSON.stringify(user));
+            document.getElementById("user-name").textContent = user.name;
+            closeModal("profile-modal");
+            toast("Profile updated successfully!");
+          }
+        } catch (err) {
+          console.error("Update profile error:", err);
+          toast("Failed to update profile");
+        }
+      }
+
+      async function uploadAvatar(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append("avatar", file);
+
+        showLoading();
+
+        try {
+          const res = await fetch(`${API}/api/profile/avatar`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: formData,
+          });
+
+          const data = await res.json();
+          hideLoading();
+
+          if (res.ok) {
+            user.avatar = data.avatar;
+            localStorage.setItem("currentUser", JSON.stringify(user));
+
+            document.getElementById("user-avatar-img").src = data.avatar;
+            document
+              .getElementById("user-avatar-img")
+              .classList.remove("hidden");
+            document.getElementById("user-avatar-text").classList.add("hidden");
+
+            toast("Avatar updated!");
+          }
+        } catch (err) {
+          hideLoading();
+          console.error("Upload avatar error:", err);
+          toast("Failed to upload avatar");
+        }
+      }
+
+      // Open profile modal with current data
+      function openProfileModal() {
+        document.getElementById("profile-name").value = user.name;
+        document.getElementById("profile-email").value = user.email;
+        document.getElementById("profile-password").value = "";
+
+        if (user.avatar) {
+          document.getElementById("profile-avatar-preview").src = user.avatar;
+          document
+            .getElementById("profile-avatar-preview")
+            .classList.remove("hidden");
+          document
+            .getElementById("profile-avatar-text")
+            .classList.add("hidden");
+        } else {
+          document.getElementById("profile-avatar-text").textContent = user.name
+            .charAt(0)
+            .toUpperCase();
+        }
+
+        openModal("profile-modal");
+      }
+
+      // ==================== TEAMS ====================
+      async function loadTeams() {
+        try {
+          const res = await fetch(`${API}/api/teams`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const teams = await res.json();
+
+          document.getElementById("teams-list").innerHTML =
+            teams.length > 0
+              ? teams
+                  .map(
+                    (t) => `
+                <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 hover:shadow-2xl transition transform hover:scale-105 animate-slide card-hover">
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="bg-indigo-100 dark:bg-indigo-900 rounded-full p-3">
+                            <i class="fas fa-users text-indigo-600 dark:text-indigo-400 text-2xl"></i>
+                        </div>
+                        ${
+                          t.owner
+                            ? `
+                            <button onclick="openTeamSettings('${t.id}')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                                <i class="fas fa-cog"></i>
+                            </button>
+                        `
+                            : ""
+                        }
+                    </div>
+                    <h3 class="text-xl font-semibold text-gray-800 dark:text-white mb-2">${
+                      t.name
+                    }</h3>
+                    <p class="text-sm text-gray-600 dark:text-gray-300 mb-3">${
+                      t.description || "No description"
+                    }</p>
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm text-gray-600 dark:text-gray-400">
+                            <i class="fas fa-users mr-1"></i>${
+                              t.member_count
+                            } member${t.member_count !== 1 ? "s" : ""}
+                        </span>
+                        <span class="px-3 py-1 text-xs rounded-full font-semibold ${
+                          t.my_role === "admin"
+                            ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
+                            : "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                        }">
+                            ${t.my_role}
+                        </span>
+                    </div>
+                </div>
+            `
+                  )
+                  .join("")
+              : '<p class="col-span-3 text-center text-gray-500 dark:text-gray-400 py-12">No teams yet. Create your first team!</p>';
+
+          // Populate team dropdown
+          document.getElementById("workspace-team").innerHTML =
+            '<option value="">Choose a team</option>' +
+            teams
+              .map((t) => `<option value="${t.id}">${t.name}</option>`)
+              .join("");
+        } catch (err) {
+          console.error("Load teams error:", err);
+        }
+      }
+
+      async function createTeam(e) {
+        e.preventDefault();
+
+        try {
+          const res = await fetch(`${API}/api/teams`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              name: document.getElementById("team-name").value.trim(),
+              description: document
+                .getElementById("team-description")
+                .value.trim(),
+            }),
+          });
+
+          if (res.ok) {
+            closeModal("create-team-modal");
+            document.getElementById("team-name").value = "";
+            document.getElementById("team-description").value = "";
+            loadTeams();
+            toast("Team created successfully!");
+          }
+        } catch (err) {
+          console.error("Create team error:", err);
+          toast("Failed to create team");
+        }
+      }
+
+      // ==================== TEAM SETTINGS ====================
+      let currentTeamId = null;
+
+      async function openTeamSettings(teamId) {
+        currentTeamId = teamId;
+
+        try {
+          // Load team info
+          const teamRes = await fetch(`${API}/api/teams`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const teams = await teamRes.json();
+          const team = teams.find((t) => t.id === teamId);
+
+          if (team) {
+            document.getElementById("edit-team-name").value = team.name;
+            document.getElementById("edit-team-description").value =
+              team.description || "";
+          }
+
+          // Load team members
+          const membersRes = await fetch(`${API}/api/teams/${teamId}/members`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const members = await membersRes.json();
+
+          document.getElementById("team-members-list").innerHTML = members
+            .map(
+              (m) => `
+            <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                <div class="flex items-center space-x-3">
+                    ${
+                      m.avatar
+                        ? `<img src="${m.avatar}" class="h-10 w-10 rounded-full">`
+                        : `<div class="h-10 w-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-semibold">${m.name
+                            .charAt(0)
+                            .toUpperCase()}</div>`
+                    }
+                    <div>
+                        <p class="font-medium text-gray-800 dark:text-white text-sm">${
+                          m.name
+                        }</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">${
+                          m.email
+                        }</p>
+                    </div>
+                </div>
+                ${
+                  !m.is_owner
+                    ? `<button onclick="removeTeamMember('${m.id}')" class="text-red-600 hover:text-red-800"><i class="fas fa-times"></i></button>`
+                    : '<span class="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">Owner</span>'
+                }
+            </div>
+        `
+            )
+            .join("");
+
+          openModal("team-settings-modal");
+        } catch (err) {
+          console.error("Open team settings error:", err);
+        }
+      }
+
+      async function updateTeam() {
+        if (!currentTeamId) return;
+
+        try {
+          const res = await fetch(`${API}/api/teams/${currentTeamId}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              name: document.getElementById("edit-team-name").value,
+              description: document.getElementById("edit-team-description")
+                .value,
+            }),
+          });
+
+          if (res.ok) {
+            closeModal("team-settings-modal");
+            loadTeams();
+            toast("Team updated!");
+          }
+        } catch (err) {
+          console.error("Update team error:", err);
+          toast("Failed to update team");
+        }
+      }
+
+      async function deleteTeam() {
+        if (
+          !currentTeamId ||
+          !confirm(
+            "Delete this team? This will also delete all associated workspaces."
+          )
+        )
+          return;
+
+        try {
+          const res = await fetch(`${API}/api/teams/${currentTeamId}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
+          });
+
+          if (res.ok) {
+            closeModal("team-settings-modal");
+            loadTeams();
+            toast("Team deleted");
+          }
+        } catch (err) {
+          console.error("Delete team error:", err);
+          toast("Failed to delete team");
+        }
+      }
+
+      async function removeTeamMember(userId) {
+        if (!currentTeamId || !confirm("Remove this member?")) return;
+
+        try {
+          const res = await fetch(
+            `${API}/api/teams/${currentTeamId}/members/${userId}`,
+            {
+              method: "DELETE",
+              headers: { Authorization: `Bearer ${token}` },
+            }
+          );
+
+          if (res.ok) {
+            openTeamSettings(currentTeamId);
+            toast("Member removed");
+          }
+        } catch (err) {
+          console.error("Remove member error:", err);
+        }
+      }
+
+      function openAddMemberModal() {
+        toast("Add member feature coming soon!");
+      }
+
+      // ==================== WORKSPACES ====================
+      async function loadWorkspaces() {
+        try {
+          const res = await fetch(`${API}/api/workspaces`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const workspaces = await res.json();
+
+          document.getElementById("workspaces-list").innerHTML =
+            workspaces.length > 0
+              ? workspaces
+                  .map(
+                    (w) => `
+                <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 hover:shadow-2xl transition transform hover:scale-105 animate-slide card-hover">
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="bg-purple-100 dark:bg-purple-900 rounded-full p-3">
+                            <i class="fas fa-briefcase text-purple-600 dark:text-purple-400 text-2xl"></i>
+                        </div>
+                        ${
+                          w.is_owner
+                            ? `
+                            <button onclick="openWorkspaceSettings('${w.id}')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                                <i class="fas fa-cog"></i>
+                            </button>
+                        `
+                            : ""
+                        }
+                    </div>
+                    <h3 class="text-xl font-semibold text-gray-800 dark:text-white mb-2">${
+                      w.name
+                    }</h3>
+                    <p class="text-sm text-gray-600 dark:text-gray-300 mb-3">${
+                      w.description || "No description"
+                    }</p>
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm text-gray-600 dark:text-gray-400">
+                            <i class="fas fa-users mr-1"></i>${
+                              w.member_count
+                            } member${w.member_count !== 1 ? "s" : ""}
+                        </span>
+                    </div>
+                </div>
+            `
+                  )
+                  .join("")
+              : '<p class="col-span-3 text-center text-gray-500 dark:text-gray-400 py-12">No workspaces yet. Create your first workspace!</p>';
+
+          // Populate workspace dropdowns
+          const html =
+            '<option value="">Select Workspace</option>' +
+            workspaces
+              .map((w) => `<option value="${w.id}">${w.name}</option>`)
+              .join("");
+
+          document.getElementById("kanban-workspace").innerHTML = html;
+          document.getElementById("doc-workspace").innerHTML = html;
+          document.getElementById("files-workspace").innerHTML = html;
+          document.getElementById("chat-workspace").innerHTML = html;
+          document.getElementById("activities-workspace").innerHTML = html;
+        } catch (err) {
+          console.error("Load workspaces error:", err);
+        }
+      }
+
+      async function createWorkspace(e) {
+        e.preventDefault();
+
+        const teamId = document.getElementById("workspace-team").value;
+        if (!teamId) {
+          toast("Please select a team");
+          return;
+        }
+
+        try {
+          const res = await fetch(`${API}/api/workspaces`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              name: document.getElementById("workspace-name").value.trim(),
+              team_id: teamId,
+              description: document
+                .getElementById("workspace-description")
+                .value.trim(),
+            }),
+          });
+
+          if (res.ok) {
+            closeModal("create-workspace-modal");
+            document.getElementById("workspace-name").value = "";
+            document.getElementById("workspace-description").value = "";
+            loadWorkspaces();
+            toast("Workspace created successfully!");
+          }
+        } catch (err) {
+          console.error("Create workspace error:", err);
+          toast("Failed to create workspace");
+        }
+      }
+
+      function openWorkspaceSettings(wsId) {
+        toast("Workspace settings coming soon!");
+      }
+
+      // ==================== KANBAN ====================
+      async function loadKanban() {
+        const wsId = document.getElementById("kanban-workspace").value;
+        if (!wsId) return;
+
+        currentWS = wsId;
+        socket.emit("join_workspace", {
+          workspace_id: wsId,
+          username: user.name,
+          user_id: user.id,
+        });
+
+        try {
+          const res = await fetch(`${API}/api/kanban/${wsId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const data = await res.json();
+
+          // Load workspace members for assignment
+          const membersRes = await fetch(
+            `${API}/api/workspaces/${wsId}/members`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            }
+          );
+          const members = await membersRes.json();
+
+          // Update assignment dropdown
+          document.getElementById("edit-task-assigned").innerHTML =
+            '<option value="">Unassigned</option>' +
+            members
+              .map((m) => `<option value="${m.id}">${m.name}</option>`)
+              .join("");
+
+          document.getElementById("kanban-board").innerHTML = data.columns
+            .map(
+              (col, ci) => `
+            <div class="kanban-column bg-gray-100 dark:bg-gray-700 rounded-lg p-4" ondrop="dropTask(event, ${ci})" ondragover="allowDrop(event)">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="font-semibold text-base md:text-lg text-gray-800 dark:text-white">${
+                      col.name
+                    }</h3>
+                    <div class="flex space-x-2">
+                        <button onclick="addTask(${ci})" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                        <button onclick="renameColumn(${ci})" class="text-gray-600 dark:text-gray-400 hover:text-gray-800">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button onclick="deleteColumn(${ci})" class="text-red-600 dark:text-red-400 hover:text-red-800">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="space-y-3">
+                    ${col.tasks
+                      .map(
+                        (t, ti) => `
+                        <div class="task-card bg-white dark:bg-gray-800 rounded-lg p-4 shadow-md" 
+                             draggable="true" 
+                             ondragstart="startDrag(event, ${ci}, ${ti})"
+                             onclick="openTaskEdit(${ci}, ${ti})">
+                            <div class="flex justify-between items-start mb-2">
+                                <h4 class="font-semibold text-gray-800 dark:text-white text-sm md:text-base">${
+                                  t.title
+                                }</h4>
+                                ${
+                                  t.priority
+                                    ? `<span class="priority-${t.priority} text-xs">${t.priority}</span>`
+                                    : ""
+                                }
+                            </div>
+                            ${
+                              t.desc
+                                ? `<p class="text-sm text-gray-600 dark:text-gray-300 mb-2">${t.desc}</p>`
+                                : ""
+                            }
+                            <div class="flex justify-between items-center text-xs text-gray-500 dark:text-gray-400">
+                                ${
+                                  t.assigned_to
+                                    ? `<span><i class="fas fa-user mr-1"></i>Assigned</span>`
+                                    : "<span></span>"
+                                }
+                                ${
+                                  t.due_date
+                                    ? `<span><i class="fas fa-calendar mr-1"></i>${new Date(
+                                        t.due_date
+                                      ).toLocaleDateString()}</span>`
+                                    : ""
+                                }
+                            </div>
+                            <button onclick="event.stopPropagation(); openComments('${wsId}', ${ci}, ${ti})" 
+                                    class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline mt-2">
+                                <i class="fas fa-comment mr-1"></i>Comments
+                            </button>
+                        </div>
+                    `
+                      )
+                      .join("")}
+                </div>
+            </div>
+        `
+            )
+            .join("");
+
+          // Load task stats
+          loadTaskStats(wsId);
+        } catch (err) {
+          console.error("Load kanban error:", err);
+        }
+      }
+
+      async function loadTaskStats(wsId) {
+        try {
+          const res = await fetch(`${API}/api/kanban/${wsId}/stats`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const stats = await res.json();
+
+          document.getElementById("pending-tasks").textContent = stats.pending;
+          document.getElementById("completed-tasks").textContent =
+            stats.completed;
+          document.getElementById("total-tasks").textContent = stats.total;
+        } catch (err) {
+          console.error("Load stats error:", err);
+        }
+      }
+
+      async function addColumn() {
+        const wsId = document.getElementById("kanban-workspace").value;
+        if (!wsId) {
+          toast("Please select a workspace");
+          return;
+        }
+
+        const name = prompt("Column name:");
+        if (!name) return;
+
+        try {
+          const res = await fetch(`${API}/api/kanban/${wsId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const data = await res.json();
+          data.columns.push({ name, tasks: [] });
+
+          await fetch(`${API}/api/kanban/${wsId}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ columns: data.columns }),
+          });
+
+          loadKanban();
+          toast("Column added");
+        } catch (err) {
+          console.error("Add column error:", err);
+        }
+      }
+
+      async function addTask(colIdx) {
+        const wsId = document.getElementById("kanban-workspace").value;
+        const title = prompt("Task title:");
+        if (!title) return;
+
+        try {
+          const res = await fetch(`${API}/api/kanban/${wsId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const data = await res.json();
+          data.columns[colIdx].tasks.push({
+            title,
+            desc: "",
+            priority: "",
+            due_date: "",
+            assigned_to: "",
+            history: [],
+          });
+
+          await fetch(`${API}/api/kanban/${wsId}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ columns: data.columns }),
+          });
+
+          loadKanban();
+          toast("Task added");
+        } catch (err) {
+          console.error("Add task error:", err);
+        }
+      }
+
+      async function renameColumn(colIdx) {
+        const wsId = document.getElementById("kanban-workspace").value;
+        const name = prompt("New column name:");
+        if (!name) return;
+
+        try {
+          await fetch(`${API}/api/kanban/${wsId}/column/${colIdx}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ name }),
+          });
+
+          loadKanban();
+          toast("Column renamed");
+        } catch (err) {
+          console.error("Rename column error:", err);
+        }
+      }
+
+      async function deleteColumn(colIdx) {
+        if (!confirm("Delete this column and all its tasks?")) return;
+
+        const wsId = document.getElementById("kanban-workspace").value;
+
+        try {
+          await fetch(`${API}/api/kanban/${wsId}/column/${colIdx}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
+          });
+
+          loadKanban();
+          toast("Column deleted");
+        } catch (err) {
+          console.error("Delete column error:", err);
+        }
+      }
+
+      function startDrag(e, ci, ti) {
+        e.stopPropagation();
+        draggedTask = { ci, ti };
+        e.target.classList.add("dragging");
+      }
+
+      function allowDrop(e) {
+        e.preventDefault();
+      }
+
+      async function dropTask(e, targetCol) {
+        e.preventDefault();
+        if (!draggedTask) return;
+
+        const wsId = document.getElementById("kanban-workspace").value;
+
+        try {
+          const res = await fetch(`${API}/api/kanban/${wsId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const data = await res.json();
+
+          const task = data.columns[draggedTask.ci].tasks[draggedTask.ti];
+          data.columns[draggedTask.ci].tasks.splice(draggedTask.ti, 1);
+          data.columns[targetCol].tasks.push(task);
+
+          await fetch(`${API}/api/kanban/${wsId}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ columns: data.columns }),
+          });
+
+          draggedTask = null;
+          loadKanban();
+        } catch (err) {
+          console.error("Drop task error:", err);
+        }
+      }
+
+      function openTaskEdit(ci, ti) {
+        currentTaskPos = { ci, ti };
+
+        const wsId = document.getElementById("kanban-workspace").value;
+
+        fetch(`${API}/api/kanban/${wsId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            const task = data.columns[ci].tasks[ti];
+
+            document.getElementById("edit-task-title").value = task.title;
+            document.getElementById("edit-task-desc").value = task.desc || "";
+            document.getElementById("edit-task-priority").value =
+              task.priority || "";
+            document.getElementById("edit-task-due").value =
+              task.due_date || "";
+            document.getElementById("edit-task-assigned").value =
+              task.assigned_to || "";
+
+            openModal("edit-task-modal");
+          });
+      }
+
+      async function updateTask(e) {
+        e.preventDefault();
+        if (!currentTaskPos) return;
+
+        const wsId = document.getElementById("kanban-workspace").value;
+
+        try {
+          await fetch(
+            `${API}/api/kanban/${wsId}/task/${currentTaskPos.ci}/${currentTaskPos.ti}`,
+            {
+              method: "PUT",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                title: document.getElementById("edit-task-title").value,
+                desc: document.getElementById("edit-task-desc").value,
+                priority: document.getElementById("edit-task-priority").value,
+                due_date: document.getElementById("edit-task-due").value,
+                assigned_to:
+                  document.getElementById("edit-task-assigned").value,
+              }),
+            }
+          );
+
+          closeModal("edit-task-modal");
+          loadKanban();
+          toast("Task updated");
+        } catch (err) {
+          console.error("Update task error:", err);
+        }
+      }
+
+      async function deleteCurrentTask() {
+        if (!currentTaskPos || !confirm("Delete this task?")) return;
+
+        const wsId = document.getElementById("kanban-workspace").value;
+
+        try {
+          await fetch(
+            `${API}/api/kanban/${wsId}/task/${currentTaskPos.ci}/${currentTaskPos.ti}`,
+            {
+              method: "DELETE",
+              headers: { Authorization: `Bearer ${token}` },
+            }
+          );
+
+          closeModal("edit-task-modal");
+          loadKanban();
+          toast("Task deleted");
+        } catch (err) {
+          console.error("Delete task error:", err);
+        }
+      }
+
+      // ==================== TASK COMMENTS ====================
+      async function openComments(wsId, colIdx, taskIdx) {
+        currentTaskKey = `${wsId}_${colIdx}_${taskIdx}`;
+
+        try {
+          const res = await fetch(
+            `${API}/api/kanban/${wsId}/task/${colIdx}/${taskIdx}/comments`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            }
+          );
+          const comments = await res.json();
+
+          document.getElementById("comments-list").innerHTML =
+            comments.length > 0
+              ? comments
+                  .map(
+                    (c) => `
+                <div class="border-b dark:border-gray-600 pb-3 mb-3">
+                    <div class="flex justify-between items-start">
+                        <p class="font-semibold text-sm text-gray-800 dark:text-white">${
+                          c.username
+                        }</p>
+                        <span class="text-xs text-gray-500 dark:text-gray-400">${new Date(
+                          c.created_at
+                        ).toLocaleString()}</span>
+                    </div>
+                    <p class="text-gray-700 dark:text-gray-300 mt-1 text-sm">${
+                      c.comment
+                    }</p>
+                </div>
+            `
+                  )
+                  .join("")
+              : '<p class="text-center text-gray-500 dark:text-gray-400 py-4 text-sm">No comments yet</p>';
+
+          openModal("comments-modal");
+        } catch (err) {
+          console.error("Load comments error:", err);
+        }
+      }
+
+      async function addComment() {
+        const comment = document.getElementById("comment-input").value.trim();
+        if (!comment) return;
+
+        const [wsId, colIdx, taskIdx] = currentTaskKey.split("_");
+
+        try {
+          await fetch(
+            `${API}/api/kanban/${wsId}/task/${colIdx}/${taskIdx}/comments`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({ comment }),
+            }
+          );
+
+          document.getElementById("comment-input").value = "";
+          openComments(wsId, colIdx, taskIdx);
+          toast("Comment added");
+        } catch (err) {
+          console.error("Add comment error:", err);
+        }
+      }
+
+      // ==================== DOCUMENTS ====================
+      async function loadDocument() {
+        const wsId = document.getElementById("doc-workspace").value;
+        if (!wsId || !quill) return;
+
+        currentWS = wsId;
+        socket.emit("join_workspace", {
+          workspace_id: wsId,
+          username: user.name,
+          user_id: user.id,
+        });
+
+        try {
+          const res = await fetch(`${API}/api/docs/${wsId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const data = await res.json();
+
+          if (data.content && data.content !== "{}") {
+            quill.setContents(JSON.parse(data.content));
+          } else {
+            quill.setText("");
+          }
+
+          document.getElementById("doc-status").textContent = "Document loaded";
+        } catch (err) {
+          console.error("Load document error:", err);
+        }
+      }
+
+      async function saveDocument(isAutoSave = false) {
+        const wsId = document.getElementById("doc-workspace").value;
+        if (!wsId || !quill) {
+          if (!isAutoSave) toast("Please select a workspace");
+          return;
+        }
+
+        try {
+          await fetch(`${API}/api/docs/${wsId}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              content: JSON.stringify(quill.getContents()),
+            }),
+          });
+
+          if (isAutoSave) {
+            document.getElementById("doc-status").textContent =
+              "Auto-saved at " + new Date().toLocaleTimeString();
+          } else {
+            toast("Document saved");
+          }
+        } catch (err) {
+          console.error("Save document error:", err);
+          if (!isAutoSave) toast("Failed to save document");
+        }
+      }
+
+      // ==================== FILES ====================
+      async function loadFiles() {
+        const wsId = document.getElementById("files-workspace").value;
+        if (!wsId) return;
+
+        try {
+          const res = await fetch(`${API}/api/files/${wsId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const files = await res.json();
+
+          document.getElementById("files-list").innerHTML =
+            files.length > 0
+              ? files
+                  .map(
+                    (f) => `
+                <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 hover:shadow-2xl transition card-hover">
+                    <div class="bg-blue-100 dark:bg-blue-900 rounded-full p-3 mb-4 w-fit">
+                        <i class="fas fa-file text-blue-600 dark:text-blue-400 text-2xl"></i>
+                    </div>
+                    <h3 class="text-base md:text-lg font-semibold text-gray-800 dark:text-white mb-2 truncate" title="${f.name}">${f.name}</h3>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">v${f.version} • ${f.uploaded_by}</p>
+                    <div class="flex space-x-2">
+                        <button onclick="previewFile('${f.url}', '${f.name}', '${f.type}')" 
+                                class="flex-1 text-center text-indigo-600 dark:text-indigo-400 text-sm py-2 border border-indigo-600 dark:border-indigo-400 rounded hover:bg-indigo-50 dark:hover:bg-indigo-900 transition">
+                            View
+                        </button>
+                        <a href="${f.url}" download 
+                           class="flex-1 text-center text-green-600 dark:text-green-400 text-sm py-2 border border-green-600 dark:border-green-400 rounded hover:bg-green-50 dark:hover:bg-green-900 transition">
+                            Download
+                        </a>
+                    </div>
+                </div>
+            `
+                  )
+                  .join("")
+              : '<p class="col-span-4 text-center text-gray-500 dark:text-gray-400 py-12">No files uploaded yet</p>';
+        } catch (err) {
+          console.error("Load files error:", err);
+        }
+      }
+
+      async function uploadFile(e) {
+        e.preventDefault();
+        const wsId = document.getElementById("files-workspace").value;
+        if (!wsId) {
+          toast("Please select a workspace");
+          return;
+        }
+
+        const file = document.getElementById("file-input").files[0];
+        if (!file) return;
+
+        if (file.size > 10 * 1024 * 1024) {
+          toast("File too large (max 10MB)");
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        showLoading();
+
+        try {
+          await fetch(`${API}/api/files/${wsId}`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: formData,
+          });
+
+          hideLoading();
+          closeModal("upload-modal");
+          document.getElementById("file-input").value = "";
+          loadFiles();
+          toast("File uploaded successfully!");
+        } catch (err) {
+          hideLoading();
+          console.error("Upload file error:", err);
+          toast("Failed to upload file");
+        }
+      }
+
+      function previewFile(url, name, type) {
+        document.getElementById("preview-filename").textContent = name;
+        document.getElementById("preview-download").href = url;
+
+        const content = document.getElementById("preview-content");
+
+        if (type === "image") {
+          content.innerHTML = `<img src="${url}" class="max-w-full h-auto mx-auto rounded-lg">`;
+        } else if (type === "video") {
+          content.innerHTML = `<video src="${url}" controls class="max-w-full h-auto mx-auto rounded-lg"></video>`;
+        } else {
+          content.innerHTML = `<iframe src="${url}" class="w-full h-full min-h-[500px] rounded-lg"></iframe>`;
+        }
+
+        openModal("file-preview-modal");
+      }
+
+      // ==================== CHAT ====================
+      function joinChat() {
+        const wsId = document.getElementById("chat-workspace").value;
+        if (!wsId) return;
+
+        currentWS = wsId;
+        socket.emit("join_workspace", {
+          workspace_id: wsId,
+          username: user.name,
+          user_id: user.id,
+        });
+
+        // Load chat history
+        loadChatHistory(wsId);
+      }
+
+      async function loadChatHistory(wsId) {
+        try {
+          const res = await fetch(`${API}/api/chat/${wsId}/history`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const messages = await res.json();
+
+          const container = document.getElementById("chat-messages");
+          container.innerHTML =
+            messages.length > 0
+              ? messages.map((m) => createMessageHTML(m)).join("")
+              : '<p class="text-center text-gray-500 dark:text-gray-400 py-8">Chat ready. Start typing!</p>';
+
+          container.scrollTop = container.scrollHeight;
+        } catch (err) {
+          console.error("Load chat history error:", err);
+        }
+      }
+
+      function sendMessage(e) {
+        e.preventDefault();
+        const input = document.getElementById("chat-input");
+        const message = input.value.trim();
+        if (!message || !currentWS) return;
+
+        socket.emit("chat_message", {
+          workspace_id: currentWS,
+          user: user.name,
+          message,
+        });
+
+        input.value = "";
+
+        // Stop typing indicator
+        if (typingTimeout) clearTimeout(typingTimeout);
+        socket.emit("typing", {
+          workspace_id: currentWS,
+          user: user.name,
+          is_typing: false,
+        });
+      }
+
+      function displayMessage(data) {
+        const container = document.getElementById("chat-messages");
+        const div = document.createElement("div");
+        div.innerHTML = createMessageHTML(data);
+        container.appendChild(div.firstElementChild);
+        container.scrollTop = container.scrollHeight;
+      }
+
+      function createMessageHTML(data) {
+        const isMe = data.user === user.name;
+        return `
+        <div class="mb-4 ${isMe ? "text-right" : ""}">
+            <div class="inline-block ${
+              isMe
+                ? "bg-indigo-600 text-white"
+                : "bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white"
+            } rounded-lg px-4 py-2 max-w-xs shadow">
+                <p class="font-semibold text-sm">${data.user}</p>
+                <p class="mt-1 text-sm">${data.message}</p>
+                <p class="text-xs opacity-70 mt-1">${new Date(
+                  data.timestamp
+                ).toLocaleTimeString()}</p>
+            </div>
+        </div>
+    `;
+      }
+
+      function handleTyping() {
+        if (!currentWS) return;
+
+        socket.emit("typing", {
+          workspace_id: currentWS,
+          user: user.name,
+          is_typing: true,
+        });
+
+        if (typingTimeout) clearTimeout(typingTimeout);
+        typingTimeout = setTimeout(() => {
+          socket.emit("typing", {
+            workspace_id: currentWS,
+            user: user.name,
+            is_typing: false,
+          });
+        }, 2000);
+      }
+
+      function handleUserTyping(data) {
+        const indicator = document.getElementById("typing-indicator");
+        const userSpan = document.getElementById("typing-user");
+
+        if (data.is_typing && data.user !== user.name) {
+          userSpan.textContent = data.user;
+          indicator.classList.remove("hidden");
+        } else {
+          indicator.classList.add("hidden");
+        }
+      }
+
+      function handleUserJoined(data) {
+        if (data.online_users) {
+          document.getElementById("online-count").textContent =
+            data.online_users.length;
+        }
+      }
+
+      function handleUserLeft(data) {
+        if (data.online_users) {
+          document.getElementById("online-count").textContent =
+            data.online_users.length;
+        }
+      }
+
+      // ==================== NOTIFICATIONS ====================
+      async function loadNotifications() {
+        try {
+          const res = await fetch(`${API}/api/notifications`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const data = await res.json();
+
+          const badge = document.getElementById("notif-badge");
+          if (data.unread_count > 0) {
+            badge.textContent = data.unread_count;
+            badge.classList.remove("hidden");
+          } else {
+            badge.classList.add("hidden");
+          }
+
+          document.getElementById("notif-list").innerHTML =
+            data.notifications && data.notifications.length > 0
+              ? data.notifications
+                  .map(
+                    (n) => `
+                <div class="p-3 ${
+                  n.read
+                    ? "bg-white dark:bg-gray-800"
+                    : "bg-indigo-50 dark:bg-indigo-900"
+                } border-b dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer"
+                     onclick="markNotificationRead('${n.id}')">
+                    <p class="text-sm text-gray-800 dark:text-gray-200">${
+                      n.message
+                    }</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">${new Date(
+                      n.created_at
+                    ).toLocaleString()}</p>
+                </div>
+            `
+                  )
+                  .join("")
+              : '<p class="p-4 text-center text-gray-500 dark:text-gray-400 text-sm">No notifications</p>';
+        } catch (err) {
+          console.error("Load notifications error:", err);
+        }
+      }
+
+      function toggleNotifications() {
+        document.getElementById("notif-dropdown").classList.toggle("hidden");
+      }
+
+      async function markNotificationRead(notifId) {
+        try {
+          await fetch(`${API}/api/notifications/${notifId}/read`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          loadNotifications();
+        } catch (err) {
+          console.error("Mark notification read error:", err);
+        }
+      }
+
+      async function markAllNotificationsRead() {
+        try {
+          await fetch(`${API}/api/notifications/read-all`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          loadNotifications();
+          toast("All notifications marked as read");
+        } catch (err) {
+          console.error("Mark all read error:", err);
+        }
+      }
+
+      function handleNotification(data) {
+        loadNotifications();
+        toast("🔔 " + data.message);
+      }
+
+      // ==================== ACTIVITIES ====================
+      async function loadActivities() {
+        const wsId = document.getElementById("activities-workspace").value;
+        if (!wsId) return;
+
+        try {
+          const res = await fetch(`${API}/api/activities/${wsId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const activities = await res.json();
+
+          document.getElementById("activities-list").innerHTML =
+            activities.length > 0
+              ? activities
+                  .map(
+                    (a) => `
+                <div class="flex items-start space-x-3 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                    <div class="bg-indigo-100 dark:bg-indigo-900 rounded-full p-2 mt-1">
+                        <i class="fas fa-history text-indigo-600 dark:text-indigo-400"></i>
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-sm md:text-base text-gray-800 dark:text-white">
+                            <span class="font-semibold">${a.user_name}</span> ${
+                      a.action
+                    }
+                        </p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            ${new Date(a.timestamp).toLocaleString()}
+                        </p>
+                    </div>
+                </div>
+            `
+                  )
+                  .join("")
+              : '<p class="text-center text-gray-500 dark:text-gray-400 py-8 text-sm">No activities yet</p>';
+        } catch (err) {
+          console.error("Load activities error:", err);
+        }
+      }
+
+      // ==================== GLOBAL SEARCH ====================
+      let searchTimeout;
+
+      async function globalSearch(query) {
+        if (query.length < 2) {
+          document.getElementById("search-results").classList.add("hidden");
+          return;
+        }
+
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(async () => {
+          try {
+            const res = await fetch(
+              `${API}/api/search?q=${encodeURIComponent(query)}`,
+              {
+                headers: { Authorization: `Bearer ${token}` },
+              }
+            );
+            const data = await res.json();
+
+            const results = [
+              ...data.workspaces.map((w) => ({ ...w, icon: "briefcase" })),
+              ...data.files.map((f) => ({ ...f, icon: "file" })),
+            ];
+
+            if (results.length > 0) {
+              document.getElementById("search-results").innerHTML = results
+                .map(
+                  (r) => `
+                    <div class="p-3 hover:bg-gray-50 dark:hover:bg-gray-600 cursor-pointer border-b dark:border-gray-600 last:border-b-0">
+                        <div class="flex items-center space-x-3">
+                            <i class="fas fa-${r.icon} text-gray-400"></i>
+                            <div>
+                                <p class="font-medium text-gray-800 dark:text-white text-sm">${r.name}</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">${r.type}</p>
+                            </div>
+                        </div>
+                    </div>
+                `
+                )
+                .join("");
+              document
+                .getElementById("search-results")
+                .classList.remove("hidden");
+            } else {
+              document.getElementById("search-results").innerHTML =
+                '<p class="p-4 text-center text-gray-500 dark:text-gray-400 text-sm">No results found</p>';
+              document
+                .getElementById("search-results")
+                .classList.remove("hidden");
+            }
+          } catch (err) {
+            console.error("Global search error:", err);
+          }
+        }, 300);
+      }
+
+      // ==================== UTILITIES ====================
+      function showSection(section) {
+        document
+          .querySelectorAll(".section")
+          .forEach((el) => el.classList.add("hidden"));
+        const target = document.getElementById(`${section}-section`);
+        if (target) target.classList.remove("hidden");
+
+        document
+          .querySelectorAll(".nav-link")
+          .forEach((el) => el.classList.remove("sidebar-active"));
+        event?.currentTarget?.classList.add("sidebar-active");
+
+        // Load section data
+        if (section === "dashboard") loadDashboardData();
+        if (section === "teams") loadTeams();
+        if (section === "workspaces") loadWorkspaces();
+      }
+
+      function openModal(id) {
+        if (id === "profile-modal") {
+          openProfileModal();
+        } else {
+          document.getElementById(id).classList.remove("hidden");
+        }
+      }
+
+      function closeModal(id) {
+        document.getElementById(id).classList.add("hidden");
+      }
+
+      function toast(msg) {
+        const div = document.createElement("div");
+        div.className =
+          "toast bg-green-50 dark:bg-green-900 border-l-4 border-green-500 text-green-800 dark:text-green-100 px-6 py-3 rounded-lg shadow-2xl z-50 animate-slide";
+        div.textContent = msg;
+        document.body.appendChild(div);
+        setTimeout(() => div.remove(), 3000);
+      }
+
+      // Close dropdowns when clicking outside
+      document.addEventListener("click", (e) => {
+        if (!e.target.closest(".relative")) {
+          document.getElementById("notif-dropdown")?.classList.add("hidden");
+          document.getElementById("user-menu")?.classList.add("hidden");
+          document.getElementById("search-results")?.classList.add("hidden");
+        }
+      });
+    </script>
+  </body>
+</html>
