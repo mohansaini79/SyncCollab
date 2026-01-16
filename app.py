@@ -49,7 +49,8 @@ CORS(app, resources={
 
 socketio = SocketIO(
     app, 
-    cors_allowed_origins="*",
+    cors_allowed_origins="ALLOWED_ORIGINS",
+    async_mode="threading",
     ping_timeout=60,
     ping_interval=25
 )
